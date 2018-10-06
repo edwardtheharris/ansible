@@ -3,7 +3,7 @@
 # Copyright: Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -266,7 +266,7 @@ import os
 import time
 
 try:
-    from linode import api as linode_api
+    from .linode import api as linode_api
     HAS_LINODE = True
 except ImportError:
     HAS_LINODE = False
@@ -286,10 +286,10 @@ def randompass():
     import string
     # as of python 2.4, this reseeds the PRNG from urandom
     random.seed()
-    lower = ''.join(random.choice(string.ascii_lowercase) for x in range(6))
-    upper = ''.join(random.choice(string.ascii_uppercase) for x in range(6))
-    number = ''.join(random.choice(string.digits) for x in range(6))
-    punct = ''.join(random.choice(string.punctuation) for x in range(6))
+    lower = ''.join(random.choice(string.ascii_lowercase) for x in list(range(6)))
+    upper = ''.join(random.choice(string.ascii_uppercase) for x in list(range(6)))
+    number = ''.join(random.choice(string.digits) for x in list(range(6)))
+    punct = ''.join(random.choice(string.punctuation) for x in list(range(6)))
     p = lower + upper + number + punct
     return ''.join(random.sample(p, len(p)))
 
@@ -658,7 +658,7 @@ def main():
         backupwindow=backupwindow,
     )
 
-    for key, value in check_items.items():
+    for key, value in list(check_items.items()):
         if value is not None:
             kwargs[key] = value
 
