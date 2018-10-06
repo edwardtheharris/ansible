@@ -9,6 +9,7 @@ cryptography = "*"
 "Jinja2" = "*"
 PyYAML = "*"
 "e1839a8" = {editable = true, path = "."}
+linode-python = "*"
 
 [dev-packages]
 

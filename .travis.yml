@@ -9,5 +9,5 @@ python:
   - '3.7'
   - pypy
 script:
-  - pytest
+  - pytest -v -l test/units/modules/clouds/linode
 ...
