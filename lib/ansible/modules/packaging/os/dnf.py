@@ -77,9 +77,7 @@ options:
     description:
       - Specifies an alternative release from which all packages will be
         installed.
-    required: false
     version_added: "2.6"
-    default: null
 
   autoremove:
     description:
@@ -87,7 +85,7 @@ options:
         installed as dependencies of user-installed packages but which are no longer
         required by any such package. Should be used alone or when state is I(absent)
     type: bool
-    default: false
+    default: "no"
     version_added: "2.4"
   exclude:
     description:
@@ -112,7 +110,6 @@ options:
     description:
       - When using latest, only update installed packages. Do not install packages.
       - Has an effect only if state is I(latest)
-    required: false
     default: "no"
     type: bool
     version_added: "2.7"
@@ -125,7 +122,6 @@ options:
   bugfix:
     description:
       - If set to C(yes), and C(state=latest) then only installs updates that have been marked bugfix related.
-    required: false
     default: "no"
     type: bool
     version_added: "2.7"
@@ -133,13 +129,11 @@ options:
     description:
       - I(Plugin) name to enable for the install/update operation.
         The enabled plugin will not persist beyond the transaction.
-    required: false
     version_added: "2.7"
   disable_plugin:
     description:
       - I(Plugin) name to disable for the install/update operation.
         The disabled plugins will not persist beyond the transaction.
-    required: false
     version_added: "2.7"
   disable_excludes:
     description:
@@ -147,7 +141,6 @@ options:
       - If set to C(all), disables all excludes.
       - If set to C(main), disable excludes defined in [main] in yum.conf.
       - If set to C(repoid), disable excludes defined for given repo id.
-    required: false
     choices: [ all, main, repoid ]
     version_added: "2.7"
   validate_certs:
@@ -168,24 +161,43 @@ options:
         package and others can cause changes to the packages which were
         in the earlier transaction).
     type: bool
-    default: False
+    default: "no"
     version_added: "2.7"
   install_repoquery:
     description:
       - This is effectively a no-op in DNF as it is not needed with DNF, but is an accepted parameter for feature
         parity/compatibility with the I(yum) module.
     type: bool
-    default: True
+    default: "yes"
     version_added: "2.7"
   download_only:
     description:
       - Only download the packages, do not install them.
-    required: false
     default: "no"
     type: bool
     version_added: "2.7"
+  lock_poll:
+    description:
+      - Poll interval to wait for the dnf lockfile to be freed.
+      - "By default this is set to -1, if you set it to a positive integer it will enable to polling"
+    required: false
+    default: -1
+    type: int
+    version_added: "2.8"
+  lock_timeout:
+    description:
+      - Amount of time to wait for the dnf lockfile to be freed
+      - This should be set along with C(lock_poll) to enable the lockfile polling.
+    required: false
+    default: 10
+    type: int
+    version_added: "2.8"
 notes:
   - When used with a `loop:` each package will be processed individually, it is much more efficient to pass the list directly to the `name` option.
+  - Group removal doesn't work if the group was installed with Ansible because
+    upstream dnf's API doesn't properly mark groups as installed, therefore upon
+    removal the module is unable to detect that the group is installed
+    (https://bugzilla.redhat.com/show_bug.cgi?id=1620324)
 requirements:
   - "python >= 2.6"
   - python-dnf
@@ -201,6 +213,13 @@ EXAMPLES = '''
 - name: install the latest version of Apache
   dnf:
     name: httpd
+    state: latest
+
+- name: install the latest version of Apache and MariaDB
+  dnf:
+    name:
+      - httpd
+      - mariadb-server
     state: latest
 
 - name: remove the Apache package
@@ -282,6 +301,18 @@ class DnfModule(YumDnf):
         super(DnfModule, self).__init__(module)
 
         self._ensure_dnf()
+        self.lockfile = "/var/cache/dnf/*_lock.pid"
+        self.pkg_mgr_name = "dnf"
+
+    def _sanitize_dnf_error_msg(self, spec, error):
+        """
+        For unhandled dnf.exceptions.Error scenarios, there are certain error
+        messages we want to filter. Do that here.
+        """
+        if to_text("no package matched") in to_text(error):
+            return "No package {0} available.".format(spec)
+
+        return error
 
     def _package_dict(self, package):
         """Return a dictionary of information for the package."""
@@ -474,13 +505,26 @@ class DnfModule(YumDnf):
         # Set installroot
         conf.installroot = installroot
 
+        # Handle different DNF versions immutable mutable datatypes and
+        # dnf v1/v2/v3
+        #
+        # In DNF < 3.0 are lists, and modifying them works
+        # In DNF >= 3.0 < 3.6 are lists, but modifying them doesn't work
+        # In DNF >= 3.6 have been turned into tuples, to communicate that modifying them doesn't work
+        #
+        # https://www.happyassassin.net/2018/06/27/adams-debugging-adventures-the-immutable-mutable-object/
+        #
         # Set excludes
         if self.exclude:
-            conf.exclude(self.exclude)
-
+            _excludes = list(conf.exclude)
+            _excludes.extend(self.exclude)
+            conf.exclude = _excludes
         # Set disable_excludes
         if self.disable_excludes:
-            conf.disable_excludes.append(self.disable_excludes)
+            _disable_excludes = list(conf.disable_excludes)
+            if self.disable_excludes not in _disable_excludes:
+                _disable_excludes.append(self.disable_excludes)
+                conf.disable_excludes = _disable_excludes
 
         # Set releasever
         if self.releasever is not None:
@@ -517,13 +561,15 @@ class DnfModule(YumDnf):
 
         # Disable repositories
         for repo_pattern in disablerepo:
-            for repo in repos.get_matching(repo_pattern):
-                repo.disable()
+            if repo_pattern:
+                for repo in repos.get_matching(repo_pattern):
+                    repo.disable()
 
         # Enable repositories
         for repo_pattern in enablerepo:
-            for repo in repos.get_matching(repo_pattern):
-                repo.enable()
+            if repo_pattern:
+                for repo in repos.get_matching(repo_pattern):
+                    repo.enable()
 
     def _base(self, conf_file, disable_gpg_check, disablerepo, enablerepo, installroot):
         """Return a fully configured dnf Base object."""
@@ -570,35 +616,6 @@ class DnfModule(YumDnf):
             return True
         else:
             return False
-
-    def _is_group_installed(self, group):
-        """
-        Check if a group is installed (the sum of the package set that makes up a group)
-
-        This is necessary until the upstream dnf API bug is fixed where installing
-        a group via the dnf API doesn't actually mark the group as installed
-            https://bugzilla.redhat.com/show_bug.cgi?id=1620324
-        """
-        pkg_set = []
-        dnf_group = self.base.comps.group_by_pattern(group)
-        try:
-            if dnf_group:
-                for pkg_type in dnf.const.GROUP_PACKAGE_TYPES:
-                    for pkg in getattr(dnf_group, '{0}_packages'.format(pkg_type)):
-                        pkg_set.append(pkg.name)
-        except AttributeError as e:
-            self.module.fail_json(
-                msg="Error attempting to determine package group installed status: {0}".format(group),
-                results=[],
-                rc=1,
-                failures=[to_native(e), ],
-            )
-
-        for pkg in pkg_set:
-            if not self._is_installed(pkg):
-                return False
-
-        return True
 
     def _is_newer_version_installed(self, pkg_name):
         candidate_pkg = self._packagename_dict(pkg_name)
@@ -823,10 +840,10 @@ class DnfModule(YumDnf):
                 # Install groups.
                 for group in groups:
                     try:
-                        if self._is_group_installed(group):
+                        group_pkg_count_installed = self.base.group_install(group, dnf.const.GROUP_PACKAGE_TYPES)
+                        if group_pkg_count_installed == 0:
                             response['results'].append("Group {0} already installed.".format(group))
                         else:
-                            self.base.group_install(group, dnf.const.GROUP_PACKAGE_TYPES)
                             response['results'].append("Group {0} installed.".format(group))
                     except dnf.exceptions.DepsolveError as e:
                         failure_response['msg'] = "Depsolve Error occured attempting to install group: {0}".format(group)
@@ -856,7 +873,9 @@ class DnfModule(YumDnf):
                         install_result = self._mark_package_install(pkg_spec)
                         if install_result['failed']:
                             failure_response['msg'] += install_result['msg']
-                            failure_response['failures'].append(install_result['failure'])
+                            failure_response['failures'].append(self._sanitize_dnf_error_msg(pkg_spec, install_result['failure']))
+                        else:
+                            response['results'].append(install_result['msg'])
 
             elif self.state == 'latest':
                 # "latest" is same as "installed" for filenames.
@@ -872,8 +891,11 @@ class DnfModule(YumDnf):
                         except dnf.exceptions.CompsError:
                             if not self.update_only:
                                 # If not already installed, try to install.
-                                self.base.group_install(group, dnf.const.GROUP_PACKAGE_TYPES)
-                                response['results'].append("Group {0} installed.".format(group))
+                                group_pkg_count_installed = self.base.group_install(group, dnf.const.GROUP_PACKAGE_TYPES)
+                                if group_pkg_count_installed == 0:
+                                    response['results'].append("Group {0} already installed.".format(group))
+                                else:
+                                    response['results'].append("Group {0} installed.".format(group))
                     except dnf.exceptions.Error as e:
                         failure_response['failures'].append(" ".join((group, to_native(e))))
 
@@ -901,7 +923,9 @@ class DnfModule(YumDnf):
                         install_result = self._mark_package_install(pkg_spec, upgrade=True)
                         if install_result['failed']:
                             failure_response['msg'] += install_result['msg']
-                            failure_response['failures'].append(install_result['failure'])
+                            failure_response['failures'].append(self._sanitize_dnf_error_msg(pkg_spec, install_result['failure']))
+                        else:
+                            response['results'].append(install_result['msg'])
 
             else:
                 # state == absent
@@ -917,24 +941,14 @@ class DnfModule(YumDnf):
                     except dnf.exceptions.CompsError:
                         # Group is already uninstalled.
                         pass
-
-                    # This is necessary until the upstream dnf API bug is fixed where installing
-                    # a group via the dnf API doesn't actually mark the group as installed
-                    #   https://bugzilla.redhat.com/show_bug.cgi?id=1620324
-                    if self._is_group_installed(group):
-                        dnf_group = self.base.comps.group_by_pattern(group)
-                        try:
-                            if dnf_group:
-                                for pkg_type in dnf.const.GROUP_PACKAGE_TYPES:
-                                    for pkg_spec in getattr(dnf_group, '{0}_packages'.format(pkg_type)):
-                                        self.base.remove(pkg_spec.name)
-                        except AttributeError as e:
-                            self.module.fail_json(
-                                msg="Error attempting to determine package group installed status: {0}".format(group),
-                                results=[],
-                                rc=1,
-                                failures=[to_native(e), ],
-                            )
+                    except AttributeError:
+                        # Group either isn't installed or wasn't marked installed at install time
+                        # because of DNF bug
+                        #
+                        # This is necessary until the upstream dnf API bug is fixed where installing
+                        # a group via the dnf API doesn't actually mark the group as installed
+                        #   https://bugzilla.redhat.com/show_bug.cgi?id=1620324
+                        pass
 
                 for environment in environments:
                     try:
@@ -945,7 +959,7 @@ class DnfModule(YumDnf):
 
                 installed = self.base.sack.query().installed()
                 for pkg_spec in pkg_specs:
-                    if installed.filter(name=pkg_spec):
+                    if ("*" in pkg_spec) or installed.filter(name=pkg_spec):
                         self.base.remove(pkg_spec)
 
                 # Like the dnf CLI we want to allow recursive removal of dependent
@@ -1075,7 +1089,12 @@ def main():
     try:
         module_implementation.run()
     except dnf.exceptions.RepoError as de:
-        module.exit_json(msg="Failed to synchronize repodata: {0}".format(to_native(de)))
+        module.fail_json(
+            msg="Failed to synchronize repodata: {0}".format(to_native(de)),
+            rc=1,
+            results=[],
+            changed=False
+        )
 
 
 if __name__ == '__main__':

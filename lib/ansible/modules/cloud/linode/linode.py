@@ -3,7 +3,7 @@
 # Copyright: Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -29,14 +29,18 @@ options:
   name:
     description:
      - Name to give the instance (alphanumeric, dashes, underscore).
-     - To keep sanity on the Linode Web Console, name is prepended with C(LinodeID_).
+     - To keep sanity on the Linode Web Console, name is prepended with C(LinodeID-).
+    required: true
   displaygroup:
     description:
      - Add the instance to a Display Group in Linode Manager.
     version_added: "2.3"
   linode_id:
     description:
-     - Unique ID of a linode server
+     - Unique ID of a linode server. This value is read-only in the sense that
+       if you specify it on creation of a Linode it will not be used. The
+       Linode API generates these IDs and we can those generated value here to
+       reference a Linode more specifically. This is useful for idempotence.
     aliases: [ lid ]
   additional_disks:
     description:
@@ -147,10 +151,23 @@ requirements:
 author:
 - Vincent Viallet (@zbal)
 notes:
+  - Please note, linode-python does not have python 3 support.
+  - This module uses the now deprecated v3 of the Linode API.
   - C(LINODE_API_KEY) env variable can be used instead.
+  - Please review U(https://www.linode.com/api/linode) for determining the required parameters.
 '''
 
 EXAMPLES = '''
+
+- name: Create a new Linode
+  linode:
+    name: linode-test1
+    plan: 1
+    datacenter: 7
+    distribution: 129
+    state: present
+  register: linode_creation
+
 - name: Create a server with a private IP Address
   linode:
      module: linode
@@ -167,6 +184,7 @@ EXAMPLES = '''
      wait_timeout: 600
      state: present
   delegate_to: localhost
+  register: linode_creation
 
 - name: Fully configure new server
   linode:
@@ -201,12 +219,12 @@ EXAMPLES = '''
       - {Label: 'newdisk', Size: 2000}
      watchdog: True
   delegate_to: localhost
+  register: linode_creation
 
 - name: Ensure a running server (create if missing)
   linode:
      api_key: 'longStringFromLinodeApi'
      name: linode-test1
-     linode_id: 12345678
      plan: 1
      datacenter: 2
      distribution: 99
@@ -217,12 +235,13 @@ EXAMPLES = '''
      wait_timeout: 600
      state: present
   delegate_to: localhost
+  register: linode_creation
 
 - name: Delete a server
   linode:
      api_key: 'longStringFromLinodeApi'
      name: linode-test1
-     linode_id: 12345678
+     linode_id: "{{ linode_creation.instance.id }}"
      state: absent
   delegate_to: localhost
 
@@ -230,7 +249,7 @@ EXAMPLES = '''
   linode:
      api_key: 'longStringFromLinodeApi'
      name: linode-test1
-     linode_id: 12345678
+     linode_id: "{{ linode_creation.instance.id }}"
      state: stopped
   delegate_to: localhost
 
@@ -238,7 +257,7 @@ EXAMPLES = '''
   linode:
      api_key: 'longStringFromLinodeApi'
      name: linode-test1
-     linode_id: 12345678
+     linode_id: "{{ linode_creation.instance.id }}"
      state: restarted
   delegate_to: localhost
 '''
@@ -247,7 +266,8 @@ import os
 import time
 
 try:
-    from linode import api as linode_api
+    from linode_api4 import LinodeClient
+    LINODE_CLIENT = LinodeClient('')
     HAS_LINODE = True
 except ImportError:
     HAS_LINODE = False
@@ -267,10 +287,10 @@ def randompass():
     import string
     # as of python 2.4, this reseeds the PRNG from urandom
     random.seed()
-    lower = ''.join(random.choice(string.ascii_lowercase) for x in range(6))
-    upper = ''.join(random.choice(string.ascii_uppercase) for x in range(6))
-    number = ''.join(random.choice(string.digits) for x in range(6))
-    punct = ''.join(random.choice(string.punctuation) for x in range(6))
+    lower = ''.join(random.choice(string.ascii_lowercase) for x in list(range(6)))
+    upper = ''.join(random.choice(string.ascii_uppercase) for x in list(range(6)))
+    number = ''.join(random.choice(string.digits) for x in list(range(6)))
+    punct = ''.join(random.choice(string.punctuation) for x in list(range(6)))
     p = lower + upper + number + punct
     return ''.join(random.sample(p, len(p)))
 
@@ -348,7 +368,7 @@ def linodeServers(module, api, state, name,
                                         PaymentTerm=payment_term)
                 linode_id = res['LinodeID']
                 # Update linode Label to match name
-                api.linode_update(LinodeId=linode_id, Label='%s_%s' % (linode_id, name))
+                api.linode_update(LinodeId=linode_id, Label='%s-%s' % (linode_id, name))
                 # Update Linode with Ansible configuration options
                 api.linode_update(LinodeId=linode_id, LPM_DISPLAYGROUP=displaygroup, WATCHDOG=watchdog, **kwargs)
                 # Save server
@@ -556,7 +576,7 @@ def main():
             state=dict(type='str', default='present',
                        choices=['absent', 'active', 'deleted', 'present', 'restarted', 'started', 'stopped']),
             api_key=dict(type='str', no_log=True),
-            name=dict(type='str'),
+            name=dict(type='str', required=True),
             alert_bwin_enabled=dict(type='bool'),
             alert_bwin_threshold=dict(type='int'),
             alert_bwout_enabled=dict(type='bool'),
@@ -639,7 +659,7 @@ def main():
         backupwindow=backupwindow,
     )
 
-    for key, value in check_items.items():
+    for key, value in list(check_items.items()):
         if value is not None:
             kwargs[key] = value
 

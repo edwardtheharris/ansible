@@ -123,10 +123,10 @@ class Cliconf(CliconfBase):
         resp['response'] = results
         return resp
 
-    def get(self, command, prompt=None, answer=None, sendonly=False, output=None):
+    def get(self, command, prompt=None, answer=None, sendonly=False, output=None, check_all=False):
         if output:
             command = self._get_command_with_output(command, output)
-        return self.send_command(command, prompt=prompt, answer=answer, sendonly=sendonly)
+        return self.send_command(command, prompt=prompt, answer=answer, sendonly=sendonly, check_all=check_all)
 
     @configure
     def commit(self, comment=None, confirmed=False, at_time=None, synchronize=False):
@@ -172,6 +172,17 @@ class Cliconf(CliconfBase):
         if len(r) == 1 and '[edit]' in r[0]:
             resp = ''
 
+        return resp
+
+    @configure
+    def rollback(self, rollback_id, commit=True):
+        resp = {}
+        self.send_command('rollback %s' % int(rollback_id))
+        resp['diff'] = self.compare_configuration()
+        if commit:
+            self.commit()
+        else:
+            self.discard_changes()
         return resp
 
     def get_diff(self, rollback_id=None):

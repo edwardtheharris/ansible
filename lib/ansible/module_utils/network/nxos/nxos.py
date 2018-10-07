@@ -161,7 +161,7 @@ class Cli:
 
                 if network_api == 'cliconf' and out:
                     for index, resp in enumerate(out):
-                        if 'Invalid command at' in resp and 'json' in resp:
+                        if ('Invalid command at' in resp or 'Ambiguous command at' in resp) and 'json' in resp:
                             if commands[index]['output'] == 'json':
                                 commands[index]['output'] = 'text'
                                 out = connection.run_commands(commands, check_rc)
@@ -224,6 +224,24 @@ class Cli:
         self._module._capabilities = json.loads(capabilities)
         return self._module._capabilities
 
+    def read_module_context(self, module_key):
+        connection = self._get_connection()
+        try:
+            module_context = connection.read_module_context(module_key)
+        except ConnectionError as exc:
+            self._module.fail_json(msg=to_text(exc, errors='surrogate_then_replace'))
+
+        return module_context
+
+    def save_module_context(self, module_key, module_context):
+        connection = self._get_connection()
+        try:
+            connection.save_module_context(module_key, module_context)
+        except ConnectionError as exc:
+            self._module.fail_json(msg=to_text(exc, errors='surrogate_then_replace'))
+
+        return None
+
 
 class Nxapi:
 
@@ -238,6 +256,7 @@ class Nxapi:
         self._module = module
         self._nxapi_auth = None
         self._device_configs = {}
+        self._module_context = {}
 
         self._module.params['url_username'] = self._module.params['username']
         self._module.params['url_password'] = self._module.params['password']
@@ -464,6 +483,17 @@ class Nxapi:
         result['network_api'] = 'nxapi'
         return result
 
+    def read_module_context(self, module_key):
+        if self._module_context.get(module_key):
+            return self._module_context[module_key]
+
+        return None
+
+    def save_module_context(self, module_key, module_context):
+        self._module_context[module_key] = module_context
+
+        return None
+
 
 def is_json(cmd):
     return str(cmd).endswith('| json')
@@ -488,8 +518,10 @@ def to_command(module, commands):
     transform = ComplexList(dict(
         command=dict(key=True),
         output=dict(default=default_output),
-        prompt=dict(),
-        answer=dict()
+        prompt=dict(type='list'),
+        answer=dict(type='list'),
+        sendonly=dict(type='bool', default=False),
+        check_all=dict(type='bool', default=False),
     ), module)
 
     commands = transform(to_list(commands))
@@ -587,3 +619,13 @@ def get_interface_type(interface):
         return 'nve'
     else:
         return 'unknown'
+
+
+def read_module_context(module):
+    conn = get_connection(module)
+    return conn.read_module_context(module._name)
+
+
+def save_module_context(module, module_context):
+    conn = get_connection(module)
+    return conn.save_module_context(module._name, module_context)

@@ -20,7 +20,7 @@ options:
   pre_reboot_delay:
     description:
       - Seconds for shutdown to wait before requesting reboot.
-      - On Linux and macOS, this is converted to minutes and rounded down. If less than 60, it will be set to 0.
+      - On Linux, macOS and OpenBSD, this is converted to minutes and rounded down. If less than 60, it will be set to 0.
       - On Solaris and FreeBSD, this will be seconds.
     default: 0
     type: int
@@ -53,17 +53,19 @@ options:
       - Message to display to users before reboot.
     default: Reboot initiated by Ansible
     type: str
+notes:
+    - For Windows targets, use the M(win_reboot) module instead.
 author:
     - Matt Davis (@nitzmahone)
     - Sam Doran (@samdoran)
 '''
 
 EXAMPLES = r'''
-# Unconditionally reboot the machine with all defaults
-- reboot:
+- name: Unconditionally reboot the machine with all defaults
+  reboot:
 
-# Reboot a slow machine that might have lots of updates to apply
-- reboot:
+- name: Reboot a slow machine that might have lots of updates to apply
+  reboot:
     reboot_timeout: 3600
 '''
 

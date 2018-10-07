@@ -245,10 +245,14 @@ options:
     custom_compatibility_version:
         description:
             - "Enables a virtual machine to be customized to its own compatibility version. If
-            `C(custom_compatibility_version)` is set, it overrides the cluster's compatibility version
+            'C(custom_compatibility_version)' is set, it overrides the cluster's compatibility version
             for this particular virtual machine."
         version_added: "2.7"
-
+    host_devices:
+        description:
+            - Single Root I/O Virtualization - technology that allows single device to expose multiple endpoints that can be passed to VMs
+            - host_devices is an list which contain dictinary with name and state of device
+        version_added: "2.7"
     delete_protected:
         description:
             - If I(yes) Virtual Machine will be set as delete protected.
@@ -359,6 +363,12 @@ options:
         type: bool
         version_added: "2.5"
         aliases: [ 'sysprep_persist' ]
+    kernel_params_persist:
+        description:
+            - "If I(true) C(kernel_params), C(initrd_path) and C(kernel_path) will persist in virtual machine configuration,
+               if I(False) it will be used for run once."
+        type: bool
+        version_added: "2.8"
     kernel_path:
         description:
             - Path to a kernel image used to boot the virtual machine.
@@ -677,6 +687,11 @@ EXAMPLES = '''
     nics:
       - name: nic1
 
+# Change VM Name
+- ovirt_vm:
+    id: 00000000-0000-0000-0000-000000000000
+    name: "new_vm_name"
+
 - name: Run VM with cloud init
   ovirt_vm:
     name: rhel7
@@ -853,6 +868,7 @@ EXAMPLES = '''
       protocol:
         - spice
         - vnc
+
 # Execute remote viever to VM
 - block:
   - name: Create a ticket for console for a running VM
@@ -869,6 +885,19 @@ EXAMPLES = '''
 
   - name: Run remote viewer with file
     command: remote-viewer ~/vvfile.vv
+
+# Default value of host_device state is present
+- name: Attach host devices to virtual machine
+  ovirt_vm:
+    name: myvm
+    host: myhost
+    placement_policy: pinned
+    host_devices:
+      - name: pci_0000_00_06_0
+      - name: pci_0000_00_07_0
+        state: absent
+      - name: pci_0000_00_08_0
+        state: present
 
 '''
 
@@ -1058,8 +1087,11 @@ class VmsModule(BaseModule):
                         otypes.BootDevice(dev) for dev in self.param('boot_devices')
                     ],
                 ) if self.param('boot_devices') else None,
+                cmdline=self.param('kernel_params') if self.param('kernel_params_persist') else None,
+                initrd=self.param('initrd_path') if self.param('kernel_params_persist') else None,
+                kernel=self.param('kernel_path') if self.param('kernel_params_persist') else None,
             ) if (
-                self.param('operating_system') or self.param('boot_devices')
+                self.param('operating_system') or self.param('boot_devices') or self.param('kernel_params_persist')
             ) else None,
             type=otypes.VmType(
                 self.param('type')
@@ -1158,6 +1190,7 @@ class VmsModule(BaseModule):
             check_custom_properties() and
             check_host() and
             not self.param('cloud_init_persist') and
+            not self.param('kernel_params_persist') and
             equal(self.param('cluster'), get_link_name(self._connection, entity.cluster)) and equal(convert_to_bytes(self.param('memory')), entity.memory) and
             equal(convert_to_bytes(self.param('memory_guaranteed')), entity.memory_policy.guaranteed) and
             equal(convert_to_bytes(self.param('memory_max')), entity.memory_policy.max) and
@@ -1166,6 +1199,7 @@ class VmsModule(BaseModule):
             equal(self.param('cpu_threads'), entity.cpu.topology.threads) and
             equal(self.param('cpu_mode'), str(cpu_mode) if cpu_mode else None) and
             equal(self.param('type'), str(entity.type)) and
+            equal(self.param('name'), str(entity.name)) and
             equal(self.param('operating_system'), str(entity.os.type)) and
             equal(self.param('boot_menu'), entity.bios.boot_menu.enabled) and
             equal(self.param('soundcard_enabled'), entity.soundcard_enabled) and
@@ -1214,6 +1248,7 @@ class VmsModule(BaseModule):
         self.changed = self.__attach_numa_nodes(entity)
         self.changed = self.__attach_watchdog(entity)
         self.changed = self.__attach_graphical_console(entity)
+        self.changed = self.__attach_host_devices(entity)
 
     def pre_remove(self, entity):
         # Forcibly stop the VM, if it's not in DOWN state:
@@ -1608,6 +1643,33 @@ class VmsModule(BaseModule):
             )
         return self._initialization
 
+    def __attach_host_devices(self, entity):
+        vm_service = self._service.service(entity.id)
+        host_devices_service = vm_service.host_devices_service()
+        host_devices = self.param('host_devices')
+        updated = False
+        if host_devices:
+            device_names = [dev.name for dev in host_devices_service.list()]
+            for device in host_devices:
+                device_name = device.get('name')
+                state = device.get('state', 'present')
+                if state == 'absent' and device_name in device_names:
+                    updated = True
+                    if not self._module.check_mode:
+                        device_id = get_id_by_name(host_devices_service, device.get('name'))
+                        host_devices_service.device_service(device_id).remove()
+
+                elif state == 'present' and device_name not in device_names:
+                    updated = True
+                    if not self._module.check_mode:
+                        host_devices_service.add(
+                            otypes.HostDevice(
+                                name=device.get('name'),
+                            )
+                        )
+
+        return updated
+
 
 def _get_role_mappings(module):
     roleMappings = list()
@@ -1895,6 +1957,7 @@ def main():
         cloud_init=dict(type='dict'),
         cloud_init_nics=dict(type='list', default=[]),
         cloud_init_persist=dict(type='bool', default=False, aliases=['sysprep_persist']),
+        kernel_params_persist=dict(type='bool', default=False),
         sysprep=dict(type='dict'),
         host=dict(type='str'),
         clone=dict(type='bool', default=False),
@@ -1925,6 +1988,7 @@ def main():
         numa_nodes=dict(type='list', default=[]),
         custom_properties=dict(type='list'),
         watchdog=dict(type='dict'),
+        host_devices=dict(type='list'),
         graphical_console=dict(type='dict'),
     )
     module = AnsibleModule(
@@ -1932,9 +1996,6 @@ def main():
         supports_check_mode=True,
         required_one_of=[['id', 'name']],
     )
-
-    if module._name == 'ovirt_vms':
-        module.deprecate("The 'ovirt_vms' module is being renamed 'ovirt_vm'", version=2.8)
 
     check_sdk(module)
     check_params(module)
@@ -1971,6 +2032,11 @@ def main():
             vms_module.post_present(ret['id'])
             # Run the VM if it was just created, else don't run it:
             if state == 'running':
+                def kernel_persist_check():
+                    return (module.params.get('kernel_params') or
+                            module.params.get('initrd_path') or
+                            module.params.get('kernel_path')
+                            and not module.params.get('cloud_init_persist'))
                 initialization = vms_module.get_initialization()
                 ret = vms_module.action(
                     action='start',
@@ -1998,17 +2064,12 @@ def main():
                             cmdline=module.params.get('kernel_params'),
                             initrd=module.params.get('initrd_path'),
                             kernel=module.params.get('kernel_path'),
-                        ) if (
-                            module.params.get('kernel_params') or
-                            module.params.get('initrd_path') or
-                            module.params.get('kernel_path')
-                        ) else None,
+                        ) if (kernel_persist_check()) else None,
                     ) if (
-                        module.params.get('kernel_params') or
-                        module.params.get('initrd_path') or
-                        module.params.get('kernel_path') or
+                        kernel_persist_check() or
                         module.params.get('host') or
-                        initialization is not None and not module.params.get('cloud_init_persist')
+                        initialization is not None
+                        and not module.params.get('cloud_init_persist')
                     ) else None,
                 )
 

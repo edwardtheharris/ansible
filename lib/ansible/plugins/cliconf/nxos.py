@@ -36,7 +36,19 @@ from ansible.plugins.connection.httpapi import Connection as HttpApi
 class Cliconf(CliconfBase):
 
     def __init__(self, *args, **kwargs):
+        self._module_context = {}
         super(Cliconf, self).__init__(*args, **kwargs)
+
+    def read_module_context(self, module_key):
+        if self._module_context.get(module_key):
+            return self._module_context[module_key]
+
+        return None
+
+    def save_module_context(self, module_key, module_context):
+        self._module_context[module_key] = module_context
+
+        return None
 
     def send_command(self, command, **kwargs):
         """Executes a cli command and returns the results
@@ -115,7 +127,7 @@ class Cliconf(CliconfBase):
             raise ValueError("'replace' value %s in invalid, valid values are %s" % (diff_replace, ', '.join(option_values['diff_replace'])))
 
         # prepare candidate configuration
-        candidate_obj = NetworkConfig(indent=2, ignore_lines=diff_ignore_lines)
+        candidate_obj = NetworkConfig(indent=2)
         candidate_obj.load(candidate)
 
         if running and diff_match != 'none' and diff_replace != 'config':
@@ -181,10 +193,10 @@ class Cliconf(CliconfBase):
         resp['response'] = results
         return resp
 
-    def get(self, command, prompt=None, answer=None, sendonly=False, output=None):
+    def get(self, command, prompt=None, answer=None, sendonly=False, output=None, check_all=False):
         if output:
             command = self._get_command_with_output(command, output)
-        return self.send_command(command, prompt=prompt, answer=answer, sendonly=sendonly)
+        return self.send_command(command, prompt=prompt, answer=answer, sendonly=sendonly, check_all=check_all)
 
     def run_commands(self, commands=None, check_rc=True):
         if commands is None:
