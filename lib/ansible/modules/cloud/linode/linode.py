@@ -1,4 +1,5 @@
-#!/usr/bin/python
+#!/opt/ansible/bin/python3
+#!/usr/bin/env python
 
 # Copyright: Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -266,8 +267,7 @@ import os
 import time
 
 try:
-    from linode_api4 import LinodeClient
-    LINODE_CLIENT = LinodeClient('')
+    import linode_api4 
     HAS_LINODE = True
 except ImportError:
     HAS_LINODE = False
@@ -293,6 +293,13 @@ def randompass():
     punct = ''.join(random.choice(string.punctuation) for x in list(range(6)))
     p = lower + upper + number + punct
     return ''.join(random.sample(p, len(p)))
+
+
+def list_linodes(client):
+    """List instances for the given account."""
+    print([i for i in client.linode.instances()])
+    return [i for i in client.linode.instances()]
+    
 
 
 def getInstanceDetails(api, server):
@@ -331,6 +338,10 @@ def linodeServers(module, api, state, name,
     disks = []
     configs = []
     jobs = []
+
+    if state == 'list':
+        instances = list_linodes(api)
+        module.exit_json(changed=False, instances=instances)
 
     # See if we can match an existing server details with the provided linode_id
     if linode_id:
@@ -573,8 +584,12 @@ def linodeServers(module, api, state, name,
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            state=dict(type='str', default='present',
-                       choices=['absent', 'active', 'deleted', 'present', 'restarted', 'started', 'stopped']),
+            state={
+                'type': 'str',
+                'default': 'present',
+                'choices': [
+                    'absent', 'active', 'deleted', 'list',
+                    'present', 'restarted', 'started', 'stopped']},
             api_key=dict(type='str', no_log=True),
             name=dict(type='str', required=True),
             alert_bwin_enabled=dict(type='bool'),
@@ -609,7 +624,7 @@ def main():
     )
 
     if not HAS_LINODE:
-        module.fail_json(msg='linode-python required for this module')
+        module.fail_json(msg='linode_api4 required for this module')
 
     state = module.params.get('state')
     api_key = module.params.get('api_key')
@@ -666,14 +681,13 @@ def main():
     # Setup the api_key
     if not api_key:
         try:
-            api_key = os.environ['LINODE_API_KEY']
+            api_key = os.environ['LINODE_TOKEN']
         except KeyError as e:
             module.fail_json(msg='Unable to load %s' % e.message)
 
     # setup the auth
     try:
-        api = linode_api.Api(api_key)
-        api.test_echo()
+        api = linode_api4.LinodeClient(api_key)
     except Exception as e:
         module.fail_json(msg='%s' % e.value[0]['ERRORMESSAGE'])
 
