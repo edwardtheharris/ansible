@@ -7,7 +7,7 @@ python:
   - '3.6'
   - '3.7'
   - pypy
-build:
+install:
   - pip install -e .
 script:
   - pytest -l -v test/units/modules/cloud/linode/
