@@ -266,7 +266,8 @@ import os
 import time
 
 try:
-    from .linode import api as linode_api
+    from linode_api4 import LinodeClient
+    LINODE_CLIENT = LinodeClient('')
     HAS_LINODE = True
 except ImportError:
     HAS_LINODE = False
