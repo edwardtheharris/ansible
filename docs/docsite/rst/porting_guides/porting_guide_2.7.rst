@@ -8,7 +8,7 @@ This section discusses the behavioral changes between Ansible 2.6 and Ansible 2.
 
 It is intended to assist in updating your playbooks, plugins and other parts of your Ansible infrastructure so they will work with this version of Ansible.
 
-We suggest you read this page along with `Ansible Changelog for 2.7 <https://github.com/ansible/ansible/blob/devel/changelogs/CHANGELOG-v2.7.rst>`_ to understand what updates you may need to make.
+We suggest you read this page along with `Ansible Changelog for 2.7 <https://github.com/ansible/ansible/blob/stable-2.7/changelogs/CHANGELOG-v2.7.rst>`_ to understand what updates you may need to make.
 
 This document is part of a collection on porting. The complete list of porting guides can be found at :ref:`porting guides <porting_guides>`.
 
@@ -145,12 +145,6 @@ Major changes in popular modules are detailed here
   :ref:`DEFAULT_SYSLOG_FACILITY`. If you have :ref:`DEFAULT_SYSLOG_FACILITY` configured, the
   location of remote logs on systems which use journald may change.
 
-* The ``lineinfile`` module was changed to show a warning when using an empty string as a regexp.
-  Since an empty regexp matches every line in a file, it will replace the last line in a file rather
-  than inserting. If this is the desired behavior, use ``'^'`` which will match every line and
-  will not trigger the warning.
-
-
 Modules removed
 ---------------
 
@@ -170,6 +164,11 @@ The following modules will be removed in Ansible 2.11. Please update your playbo
 * ``na_cdot_user`` use :ref:`na_ontap_user <na_ontap_user_module>` instead.
 * ``na_cdot_user_role`` use :ref:`na_ontap_user_role <na_ontap_user_role_module>` instead.
 * ``na_cdot_volume`` use :ref:`na_ontap_volume <na_ontap_volume_module>` instead.
+* ``sf_account_manager`` use :ref:`na_elementsw_account<na_elementsw_account_module>` instead.
+* ``sf_check_connections`` use :ref:`na_elementsw_check_connections<na_elementsw_check_connections_module>` instead.
+* ``sf_snapshot_schedule_manager`` use :ref:`na_elementsw_snapshot_schedule<na_elementsw_snapshot_schedule_module>` instead.
+* ``sf_volume_access_group_manager`` use :ref:`na_elementsw_access_group<na_elementsw_access_group_module>` instead.
+* ``sf_volume_manager`` use :ref:`na_elementsw_volume<na_elementsw_volume_module>` instead.
 
 Noteworthy module changes
 -------------------------
@@ -196,6 +195,12 @@ Noteworthy module changes
 
 * The ``interface_name`` module option for ``na_ontap_net_vlan`` has been removed and should be removed from your playbooks
 
+* The ``win_disk_image`` module has deprecated the return value ``mount_path``, use ``mount_paths[0]`` instead. This will
+  be removed in Ansible 2.11.
+
+* ``include_role`` and ``include_tasks`` can now be used directly from ``ansible`` (adhoc) and ``ansible-console``::
+
+    #> ansible -m include_role -a 'name=myrole' all
 
 Plugins
 =======

@@ -67,6 +67,8 @@ For instance ensuring that a specific tenant exists, is done using the following
 
 A complete list of existing ACI modules is available for the latest stable release on the :ref:`list of network modules <network_modules>`. You can also view the `current development version <https://docs.ansible.com/ansible/devel/modules/list_of_network_modules.html#aci>`_.
 
+If you want to learn how to write your own ACI modules to contribute, look at the :ref:`Developing Cisco ACI modules <aci_dev_guide>` section.
+
 Querying ACI configuration
 ..........................
 
@@ -101,14 +103,14 @@ After registering the return values of the :ref:`aci_tenant <aci_tenant_module>`
 
 
 Running on the controller locally
----------------------------------
+.................................
 As originally designed, Ansible modules are shipped to and run on the remote target(s), however the ACI modules (like most network-related modules) do not run on the network devices or controller (in this case the APIC), but they talk directly to the APIC's REST interface.
 
 For this very reason, the modules need to run on the local Ansible controller (or are delegated to another system that *can* connect to the APIC).
 
 
 Delegating to localhost
-.......................
+```````````````````````
 So let us assume we have our target configured in the inventory using the FQDN name as the ``ansible_host`` value, as shown below.
 
 .. code-block:: yaml
@@ -137,7 +139,7 @@ If one would forget to add this directive, Ansible will attempt to connect to th
 
 
 Using the local connection method
-.................................
+`````````````````````````````````
 Another option frequently used, is to tie the ``local`` connection method to this target so that every subsequent task for this target will use the local connection method (hence run it locally, rather than use SSH).
 
 In this case the inventory may look like this:
@@ -261,6 +263,7 @@ More information
 ................
 Various resources exist to start learn more about ACI programmability, we recommend the following links:
 
+- :ref:`Developing Cisco ACI modules <aci_dev_guide>`
 - `Jacob McGill: Automating Cisco ACI with Ansible <https://blogs.cisco.com/developer/automating-cisco-aci-with-ansible-eliminates-repetitive-day-to-day-tasks>`_
 - `Cisco DevNet Learning Labs about ACI and Ansible <https://learninglabs.cisco.com/labs/tags/ACI,Ansible>`_
 
@@ -296,7 +299,7 @@ Signature-based authentication using certificates
 Using signature-based authentication is more efficient and more reliable than password-based authentication.
 
 Generate certificate and private key
-,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+````````````````````````````````````
 Signature-based authentication requires a (self-signed) X.509 certificate with private key, and a configuration step for your AAA user in ACI. To generate a working X.509 certificate and private key, use the following procedure:
 
 .. code-block:: bash
@@ -304,7 +307,7 @@ Signature-based authentication requires a (self-signed) X.509 certificate with p
     $ openssl req -new -newkey rsa:1024 -days 36500 -nodes -x509 -keyout admin.key -out admin.crt -subj '/CN=Admin/O=Your Company/C=US'
 
 Configure your local user
-,,,,,,,,,,,,,,,,,,,,,,,,,
+`````````````````````````
 Perform the following steps:
 
 - Add the X.509 certificate to your ACI AAA local user at :guilabel:`ADMIN` » :guilabel:`AAA`
@@ -330,13 +333,13 @@ You can automate this by using the following Ansible task:
     
         aaa_user: admin
         certificate_name: admin
-        certificate: "{{ lookup('file', 'pki/admin.crt') }}"  # This wil read the certificate data from a local file
+        certificate: "{{ lookup('file', 'pki/admin.crt') }}"  # This will read the certificate data from a local file
 
 .. note:: Signature-based authentication only works with local users.
 
 
 Use signature-based authentication with Ansible
-,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+```````````````````````````````````````````````
 You need the following parameters with your ACI module(s) for it to work:
 
 .. code-block:: yaml
@@ -348,7 +351,7 @@ You need the following parameters with your ACI module(s) for it to work:
 .. hint:: If you use a certificate name in ACI that matches the private key's basename, you can leave out the ``certificate_name`` parameter like the example above.
 
 More information
-,,,,,,,,,,,,,,,,
+````````````````
 Detailed information about Signature-based Authentication is available from `Cisco APIC Signature-Based Transactions <https://www.cisco.com/c/en/us/td/docs/switches/datacenter/aci/apic/sw/kb/b_KB_Signature_Based_Transactions.html>`_.
 
 
@@ -563,6 +566,8 @@ You will find our roadmap, an overview of open ACI issues and pull-requests, and
 
    :ref:`List of ACI modules <aci_network_modules>`
        A complete list of supported ACI modules.
+   :ref:`Developing Cisco ACI modules <aci_dev_guide>`
+       A walkthough on how to develop new Cisco ACI modules to contribute back.
    `ACI community <https://github.com/ansible/community/wiki/Network:-ACI>`_
        The Ansible ACI community wiki page, includes roadmap, ideas and development documentation.
    :ref:`network_guide`
