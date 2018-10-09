@@ -6,6 +6,7 @@
 # GNU General Public License v3.0+ (see COPYING or
 # https://www.gnu.org/licenses/gpl-3.0.txt)
 import os
+from pprint import pprint
 import linode_api4
 from ansible.module_utils.basic import AnsibleModule
 
@@ -17,7 +18,13 @@ def create_linode(module, client):
 
     state = present, absent
     """
-    return {'module': module, 'client': client}
+    new_linode = client.linode.instance_create(
+        ltype=module.params.get('linode_type'),
+        region=module.params.get('region'),
+        image=module.params.get('image'),
+        authorized_keys=module.params.get('public_key'),
+        label=module.params.get('name'))
+    return {'changed': True, 'instances': new_linode}
 
 
 def list_linodes(client):
@@ -25,7 +32,8 @@ def list_linodes(client):
 
     state = list
     """
-    return [i.label for i in client.linode.instances()]
+    return {'changed': False,
+            'instances': [i.label for i in client.linode.instances()]}
 
 
 def manage_linodes(module, client):
@@ -41,6 +49,7 @@ def manage_linodes(module, client):
         'started': start_linode(module, client),
         'stopped': stop_linode(module, client)
     }
+    module.log(module.params.get('state'))
 
     return manage_functions.get(module.params.get('state'))
 
@@ -64,6 +73,13 @@ def main():
     """Main module execution."""
     module = AnsibleModule(
         argument_spec={
+            'image': {'type': 'str'},
+            'linode_id': {'type': 'str'},
+            'linode_type': {'type': 'str'},
+            'name': {'type': 'str'},
+            'passowrd': {'type': 'str'},
+            'public_key': {'type': 'str'},
+            'region': {'type': 'str'},
             'state': {
                 'type': 'str',
                 'default': 'present',
@@ -71,9 +87,11 @@ def main():
                     'absent', 'active', 'deleted', 'list',
                     'present', 'restarted', 'started', 'stopped']},
             'token': {'type': 'str', 'no_log': True},
-            'name': {'type': 'str'},
         },
     )
+    module.debug(module.params.get('state'))
+    module.debug(module)
+    module.debug(pprint(module.params))
 
     # Setup the api_key
     if not module.params.get('token'):
@@ -89,7 +107,9 @@ def main():
     except KeyError as exception:
         module.fail_json(msg='%s' % exception)
 
-    module.exit_json(changed=False, instances=manage_linodes(module, client))
+    results = manage_linodes(module, client)
+    module.exit_json(
+        changed=results.get('changed'), instances=results.get('instances'))
 
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',

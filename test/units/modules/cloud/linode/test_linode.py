@@ -20,6 +20,7 @@ class TestLinodeModule():
 
     def test_create_linode(self):
         """Test function to create a linode."""
+        result = linode.create_linode(self.client, )
         assert self is False
 
     def test_delete_linode(self):
