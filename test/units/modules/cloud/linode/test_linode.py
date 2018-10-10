@@ -36,12 +36,13 @@ class TestLinodeModule():
 
     def test_list_linodes(self, instances):
         """Test ability to list linodes."""
+        print(instances[0].label)
         self.client.linode.list_instances = MagicMock(
-            autospec=True,
+            spec=linode_api4.paginated_list.PaginatedList,
             return_value=instances)
 
         linodes = linode.list_linodes(self.client)
 
         assert isinstance(linodes, dict)
         assert linodes.get('changed') is False
-        assert linodes.get('instances') == ['gahancorporation_com']
+        assert linodes.get('instances') == ['testinstance']
