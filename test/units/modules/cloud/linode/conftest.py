@@ -9,7 +9,7 @@ set_module_args({'state': 'list'})
 @pytest.fixture
 def instances():
     """Return PaginatedList."""
-    lpfile = open('test/units/modules/cloud/linode/linode_list.pickle', 'rb')
+    lpfile = open('test/units/modules/cloud/linode/linode_list.out', 'rb')
     return_value = pickle.load(lpfile)
     lpfile.close()
     return return_value
