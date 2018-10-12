@@ -1,6 +1,5 @@
 #!/opt/ansible/bin/python3
 """Linode management module."""
-# pylint: disable=invalid-name,wrong-import-position
 
 # Copyright: Ansible Project
 # GNU General Public License v3.0+ (see COPYING or
@@ -10,7 +9,7 @@ from pprint import pprint
 import linode_api4
 from ansible.module_utils.basic import AnsibleModule
 
-__metaclass__ = type
+# __metaclass__ = type
 
 
 def create_linode(module, client):
@@ -32,8 +31,10 @@ def list_linodes(client):
 
     state = list
     """
-    return {'changed': False,
-            'instances': [i.label for i in client.linode.instances()]}
+    return {
+        'changed': False,
+        'instances': [linode.label for linode in client.linode.instances()]
+    }
 
 
 def manage_linodes(module, client):
