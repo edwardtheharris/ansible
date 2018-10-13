@@ -6,6 +6,7 @@ python:
   - '3.6'
 install:
   - pip install -e .
+  - pip install mock || true
   - pip install linode_api4
 script:
   - pytest -l -v test/units/modules/cloud/linode/

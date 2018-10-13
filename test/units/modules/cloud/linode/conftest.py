@@ -1,6 +1,9 @@
 """Conftest for linode tests."""
 # pylint: disable=protected-access
-from unittest import mock
+try:
+    from unittest import mock
+except ImportError:
+    import mock
 import pytest
 from units.modules.utils import set_module_args
 from ansible.modules.cloud.linode.linode import linode_api4
