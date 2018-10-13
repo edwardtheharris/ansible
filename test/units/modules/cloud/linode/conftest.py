@@ -15,6 +15,9 @@ set_module_args({'state': 'list'})
 def linode_client():
     """Return a mocked LinodeClient."""
     client = linode_api4.LinodeClient('')
+    linode_api4.objects.Instance.delete = mock.MagicMock(
+        linode_api4.objects.Instance, 'delete',
+        autospec=True, return_value=True)
     instance = linode_api4.objects.Instance.make_instance(
         8675309, client)
     instance.label = 'eight.six.seven'
@@ -26,6 +29,9 @@ def linode_client():
                  'label': 'the-new-generation'}],
              'pages': 1, 'results': 1},
             client, INS))
+    client.linode.instance_create = mock.Mock(
+        client.linode.instance_create,
+        return_value=(instance, 'rootpwd'))
     return client
 
 
@@ -34,19 +40,30 @@ def module():
     """Return a hopefully useful module."""
     return AnsibleModule(
         argument_spec={
+            "authorized_keys": {'type': 'list'},
+            "authorized_users": {'type': 'list'},
+            "backups_enabled": {'type': 'bool'},
+            "backup_id": {'type': 'int'},
+            'booted': {'type': 'bool'},
+            "group": {'type': 'str'},
             'image': {'type': 'str'},
-            'linode_id': {'type': 'str'},
-            'linode_type': {'type': 'str'},
+            'id': {'type': 'str'},
+            'type': {'type': 'str'},
             'name': {'type': 'str'},
-            'passowrd': {'type': 'str'},
+            "private_ip": {'type': 'bool'},
             'public_key': {'type': 'str'},
             'region': {'type': 'str'},
+            'root_pass': {'type': 'str', 'no_log': True},
+            "stackscript_id": {'type': 'int'},
+            "stackscript_data": {'type': 'str'},
             'state': {
                 'type': 'str',
                 'default': 'present',
                 'choices': [
                     'absent', 'active', 'deleted', 'list',
                     'present', 'restarted', 'started', 'stopped']},
+            "swap_size": {'type': 'int'},
+            'tags': {'type': 'list'},
             'token': {'type': 'str', 'no_log': True},
         },
     )

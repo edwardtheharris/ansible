@@ -5,7 +5,6 @@
 # GNU General Public License v3.0+ (see COPYING or
 # https://www.gnu.org/licenses/gpl-3.0.txt)
 import os
-from pprint import pprint
 import linode_api4
 from ansible.module_utils.basic import AnsibleModule
 
@@ -17,21 +16,30 @@ def create_linode(module, client):
 
     state = present, absent
     """
-    new_linode = client.linode.instance_create(
-        ltype=module.params.get('linode_type'),
-        region=module.params.get('region'),
-        image=module.params.get('image'),
-        authorized_keys=module.params.get('public_key'),
-        label=module.params.get('name'))
-    return {'changed': True, 'instances': new_linode}
+    try:
+        new_linode, root_pass = client.linode.instance_create(
+            image=module.params.get('image'),
+            label=module.params.get('name'),
+            ltype=module.params.get('type'),
+            authorized_keys=module.params.get('public_key'),
+            region=module.params.get('region'))
+    except (TypeError, linode_api4.errors.ApiError) as exception:
+        module.fail_json(msg="Failed: %s" % exception)
+
+    return {'changed': True,
+            'instances': [
+                {'id': new_linode.id,
+                 'name': new_linode.label,
+                 'root_pass': root_pass}]}
 
 
-def list_linodes(client):
+def list_linodes(module, client):
     """List instances for the given account.
 
     state = list
     """
     return {
+        'module': module,
         'changed': False,
         'instances': [linode.label for linode in client.linode.instances()]
     }
@@ -44,20 +52,30 @@ def manage_linodes(module, client):
     :param client: Linode API client.
     """
     manage_functions = {
-        'absent': remove_linode(module, client),
-        'list': list_linodes(client),
-        'present': create_linode(module, client),
-        'started': start_linode(module, client),
-        'stopped': stop_linode(module, client)
+        'absent': remove_linode,
+        'list': list_linodes,
+        'present': create_linode,
+        'started': start_linode,
+        'stopped': stop_linode,
     }
     module.log(module.params.get('state'))
 
-    return manage_functions.get(module.params.get('state'))
+    return manage_functions.get(
+        module.params.get('state'))(module, client)
 
 
 def remove_linode(module, client):
     """Remove an existing linode."""
-    return {'module': module, 'client': client}
+    try:
+        rem_linode = client.linode.instances(
+            linode_api4.Instance.id == module.params.get('id'))[0]
+        linode_id = rem_linode.id
+        rem_linode.delete()
+    except (TypeError, IndexError, linode_api4.errors.ApiError) as exception:
+        module.fail_json(msg="Failed: %s" % exception)
+
+    return {'changed': True,
+            'instances': [{'id': linode_id}]}
 
 
 def start_linode(module, client):
@@ -74,25 +92,33 @@ def main():
     """Main module execution."""
     module = AnsibleModule(
         argument_spec={
+            "authorized_keys": {'type': 'list'},
+            "authorized_users": {'type': 'list'},
+            "backups_enabled": {'type': 'bool'},
+            "backup_id": {'type': 'int'},
+            'booted': {'type': 'bool'},
+            "group": {'type': 'str'},
             'image': {'type': 'str'},
-            'linode_id': {'type': 'str'},
-            'linode_type': {'type': 'str'},
+            'id': {'type': 'str'},
+            'type': {'type': 'str'},
             'name': {'type': 'str'},
-            'passowrd': {'type': 'str'},
+            "private_ip": {'type': 'bool'},
             'public_key': {'type': 'str'},
             'region': {'type': 'str'},
+            'root_pass': {'type': 'str', 'no_log': True},
+            "stackscript_id": {'type': 'int'},
+            "stackscript_data": {'type': 'str'},
             'state': {
                 'type': 'str',
                 'default': 'present',
                 'choices': [
                     'absent', 'active', 'deleted', 'list',
                     'present', 'restarted', 'started', 'stopped']},
+            "swap_size": {'type': 'int'},
+            'tags': {'type': 'list'},
             'token': {'type': 'str', 'no_log': True},
         },
     )
-    module.debug(module.params.get('state'))
-    module.debug(module)
-    module.debug(pprint(module.params))
 
     # Setup the api_key
     if not module.params.get('token'):

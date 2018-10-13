@@ -1,4 +1,5 @@
 # build products...
+.play/
 *.py[co]
 build
 AUTHORS.TXT
