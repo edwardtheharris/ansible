@@ -29,8 +29,10 @@ def create_linode(module, client):
     return {'changed': True,
             'instances': [
                 {'id': new_linode.id,
+                 'ipv4': new_linode.ipv4,
                  'name': new_linode.label,
-                 'root_pass': root_pass}]}
+                 'root_pass': root_pass,
+                 'dict': new_linode.__dict__}]}
 
 
 def list_linodes(module, client):
