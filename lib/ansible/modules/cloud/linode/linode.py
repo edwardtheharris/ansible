@@ -31,8 +31,7 @@ def create_linode(module, client):
                 {'id': new_linode.id,
                  'ipv4': new_linode.ipv4,
                  'name': new_linode.label,
-                 'root_pass': root_pass,
-                 'dict': new_linode.__dict__}]}
+                 'root_pass': root_pass}]}
 
 
 def list_linodes(module, client):
