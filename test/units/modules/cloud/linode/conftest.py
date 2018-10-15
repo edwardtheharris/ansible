@@ -21,9 +21,14 @@ def linode_client():
     linode_api4.objects.Instance.delete = mock.MagicMock(
         linode_api4.objects.Instance, 'delete',
         autospec=True, return_value=True)
-    instance = linode_api4.objects.Instance.make_instance(
-        8675309, client)
+    # instance = linode_api4.objects.Instance.make_instance(
+    #    8675309, client)
+    instance = mock.MagicMock(
+        linode_api4.objects.Instance, 'make_instance',
+        autospec=True, return_value=linode_api4.objects.Instance)
     instance.label = 'eight.six.seven'
+    instance.id = 8675309
+    instance.ipv4 = '192.168.0.1'
     client.linode.instances = mock.Mock(
         client.linode.instances,
         return_value=PL.make_paginated_list(
