@@ -3,8 +3,8 @@
 
 import sys
 
-from ansible.compat.tests import unittest
-from ansible.compat.tests.mock import patch, MagicMock
+from units.compat import unittest
+from units.compat.mock import patch, MagicMock
 
 from ansible.module_utils.six.moves import builtins
 from ansible.module_utils._text import to_native
@@ -20,6 +20,12 @@ class TestPostgres(unittest.TestCase):
         for mod in mods:
             if mod in sys.modules:
                 del sys.modules[mod]
+
+    def test_import(self):
+        # this import makes dependency analysis work so the tests will run when the module_utils change
+        from ansible.module_utils.postgres import HAS_PSYCOPG2
+
+        assert HAS_PSYCOPG2 is not None
 
     @patch.object(builtins, '__import__')
     def test_postgres_pg2_missing_ensure_libs(self, mock_import):

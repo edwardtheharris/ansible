@@ -93,6 +93,15 @@ In previous version of Ansible, this can still be accomplished as follows::
         msg: "the command failed"
       when: "'FAILED' in command_result.stderr"
 
+You can also combine multiple conditions to specify this behavior as follows::
+
+    - name: Check if a file exists in temp and fail task if it does
+      command: ls /tmp/this_should_not_be_here
+      register: result
+      failed_when:
+        - '"No such" not in result.stdout'
+        - result.rc == 0
+
 .. _override_the_changed_result:
 
 Overriding The Changed Result
@@ -116,6 +125,15 @@ does not cause handlers to fire::
       - shell: wall 'beep'
         changed_when: False
 
+You can also combine multiple conditions to override "changed" result::
+
+    - command: /bin/fake_command
+      register: result
+      ignore_errors: True
+      changed_when:
+        - '"ERROR" in result.stderr'
+        - result.rc == 2
+
 Aborting the play
 `````````````````
 
@@ -130,6 +148,28 @@ The ``any_errors_fatal`` play option will mark all hosts as failed if any fails,
 
 for finer-grained control ``max_fail_percentage`` can be used to abort the run after a given percentage of hosts has failed.
 
+Using blocks
+````````````
+
+Most of what you can apply to a single task (with the exception of loops) can be applied at the :ref:`playbooks_blocks` level, which also makes it much easier to set data or directives common to the tasks.
+Blocks also introduce the ability to handle errors in a way similar to exceptions in most programming languages.
+Blocks only deal with 'failed' status of a task. A bad task definition or an unreachable host are not 'rescuable' errors::
+
+    tasks:
+    - name: Handle the error
+      block:
+        - debug:
+            msg: 'I execute normally'
+        - name: i force a failure
+          command: /bin/false
+        - debug:
+            msg: 'I never execute, due to the above task failing, :-('
+      rescue:
+        - debug:
+            msg: 'I caught an error, can do stuff here to fix it, :-)'
+
+This will 'revert' the failed status of the outer ``block`` task for the run and the play will continue as if it had succeeded. 
+See :ref:`block_error_handling` for more examples.
 
 .. seealso::
 

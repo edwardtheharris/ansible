@@ -8,12 +8,12 @@ __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['preview'],
-                    'supported_by': 'community'}
+                    'supported_by': 'certified'}
 
 
 DOCUMENTATION = '''
 module: na_ontap_motd
-author: Piotr Olczak (polczak@redhat.com)
+author: Piotr Olczak (@dprts) <polczak@redhat.com>
 extends_documentation_fragment:
     - netapp.na_ontap
 short_description: Setup motd on cDOT
@@ -127,6 +127,9 @@ class CDotMotd(object):
         return api_call
 
     def commit_changes(self):
+        results = netapp_utils.get_cserver(self.server)
+        cserver = netapp_utils.setup_na_ontap_zapi(module=self.module, vserver=results)
+        netapp_utils.ems_log_event("na_ontap_motd", cserver)
         if self.parameters['state'] == 'absent':
             # Just make sure it is empty
             self.parameters['message'] = ''

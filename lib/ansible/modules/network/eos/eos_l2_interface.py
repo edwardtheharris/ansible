@@ -171,14 +171,18 @@ def map_obj_to_commands(updates, module):
                     if obj_in_have['mode'] == 'access':
                         commands.append('no switchport access vlan {0}'.format(obj_in_have['access_vlan']))
                         if native_vlan:
+                            commands.append('switchport mode trunk')
                             commands.append('switchport trunk native vlan {0}'.format(native_vlan))
                         if trunk_allowed_vlans:
+                            commands.append('switchport mode trunk')
                             commands.append('switchport trunk allowed vlan {0}'.format(trunk_allowed_vlans))
                     else:
                         if obj_in_have['native_vlan']:
-                            commands.append('not switchport trunk native vlan {0}'.format(obj_in_have['native_vlan']))
+                            commands.append('no switchport trunk native vlan {0}'.format(obj_in_have['native_vlan']))
+                            commands.append('no switchport mode trunk')
                         if obj_in_have['trunk_allowed_vlans']:
-                            commands.append('not switchport trunk allowed vlan {0}'.format(obj_in_have['trunk_allowed_vlans']))
+                            commands.append('no switchport trunk allowed vlan {0}'.format(obj_in_have['trunk_allowed_vlans']))
+                            commands.append('no switchport mode trunk')
                         commands.append('switchport access vlan {0}'.format(access_vlan))
                 else:
                     if mode == 'access':
@@ -209,16 +213,19 @@ def map_config_to_obj(module):
     for item in set(match):
         command = {'command': 'show interfaces {0} switchport | include Switchport'.format(item),
                    'output': 'text'}
-        switchport_cfg = run_commands(module, command)[0].split(':')[1].strip()
-        if switchport_cfg == 'Enabled':
-            state = 'present'
-        else:
-            state = 'absent'
+        command_result = run_commands(module, command)
+        if command_result[0] != "":
+            switchport_cfg = command_result[0].split(':')[1].strip()
 
-        obj = {
-            'name': item.lower(),
-            'state': state,
-        }
+            if switchport_cfg == 'Enabled':
+                state = 'present'
+            else:
+                state = 'absent'
+
+            obj = {
+                'name': item.lower(),
+                'state': state,
+            }
 
         obj['access_vlan'] = parse_config_argument(configobj, item, 'switchport access vlan')
         obj['native_vlan'] = parse_config_argument(configobj, item, 'switchport trunk native vlan')
