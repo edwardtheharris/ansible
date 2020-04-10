@@ -232,7 +232,7 @@ class ElbInformation(object):
                     elb.get('LoadBalancerName')])
             tag_item = result.get('TagDescriptions')
 
-            for tag in tag_item.get('Tags'):
+            for tag in tag_item:
                 tags.append({tag.get('Key'): tag.get('Value')})
             elb_info = {
                 'name': elb.get('LoadBalancerName'),
