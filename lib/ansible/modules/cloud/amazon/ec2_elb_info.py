@@ -226,13 +226,13 @@ class ElbInformation(object):
                 except ZeroDivisionError:
                     elb_info['instances_inservice_percent'] = 0.
         except AttributeError:
-            tags = []
+            tags = {}
             result = self.client.describe_tags(
                 LoadBalancerNames=[
                     elb.get('LoadBalancerName')])
             for tag_item in result.get('TagDescriptions'):
                 for tag in tag_item.get('Tags'):
-                    tags.append({tag.get('Key'): tag.get('Value')})
+                    tags.update({tag.get('Key'): tag.get('Value')})
             elb_info = {
                 'name': elb.get('LoadBalancerName'),
                 'zones': elb.get('AvailabilityZones'),
