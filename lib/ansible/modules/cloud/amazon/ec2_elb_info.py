@@ -99,6 +99,8 @@ except ImportError:
 
 class ElbInformation(object):
     """Handles ELB information."""
+    client = None
+    session = None
 
     def __init__(self,
                  module,
@@ -129,14 +131,17 @@ class ElbInformation(object):
 
         for listener in listeners:
             listener_dict = {
-                'load_balancer_port': listener.get('LoadBalancerPort'),
-                'instance_port': listener.get('InstancePort'),
-                'protocol': listener.get('Protocol'),
-                'instance_protocol': listener.get('InstanceProtocol')
+                'load_balancer_port':
+                    listener.get('Listener').get('LoadBalancerPort'),
+                'instance_port': listener.get('Listener').get('InstancePort'),
+                'protocol': listener.get('Listener').get('Protocol'),
+                'instance_protocol':
+                    listener.get('Listener').get('InstanceProtocol')
             }
 
             try:
-                ssl_certificate_id = listener.get('SSLCertificateId')
+                ssl_certificate_id = listener.get(
+                    'Listener').get('SSLCertificateId')
             except IndexError:
                 pass
             else:
@@ -148,7 +153,7 @@ class ElbInformation(object):
         return listener_list
 
     def _get_health_check(self, health_check):
-        protocol, port_path = health_check.target.split(':')
+        protocol, port_path = health_check.get('Target').split(':')
         try:
             port, path = port_path.split('/', 1)
             path = '/{0}'.format(path)
@@ -159,10 +164,10 @@ class ElbInformation(object):
         health_check_dict = {
             'ping_protocol': protocol.lower(),
             'ping_port': int(port),
-            'response_timeout': health_check.timeout,
-            'interval': health_check.interval,
-            'unhealthy_threshold': health_check.unhealthy_threshold,
-            'healthy_threshold': health_check.healthy_threshold,
+            'response_timeout': health_check.get('Timeout'),
+            'interval': health_check.get('Interval'),
+            'unhealthy_threshold': health_check.get('UnhealthyThreshold'),
+            'healthy_threshold': health_check.get('HealthyThreshold'),
         }
 
         if path:
@@ -177,7 +182,8 @@ class ElbInformation(object):
                 'zones': elb.availability_zones,
                 'dns_name': elb.dns_name,
                 'canonical_hosted_zone_name': elb.canonical_hosted_zone_name,
-                'canonical_hosted_zone_name_id': elb.canonical_hosted_zone_name_id,
+                'canonical_hosted_zone_name_id':
+                    elb.canonical_hosted_zone_name_id,
                 'hosted_zone_name': elb.canonical_hosted_zone_name,
                 'hosted_zone_id': elb.canonical_hosted_zone_name_id,
                 'instances': [instance.id for instance in elb.instances],
@@ -220,8 +226,16 @@ class ElbInformation(object):
                 except ZeroDivisionError:
                     elb_info['instances_inservice_percent'] = 0.
         except AttributeError:
+            tags = []
+            result = self.client.describe_tags(
+                LoadBalancerNames=[
+                    elb.get('LoadBalancerName')])
+            tag_item = result.get('TagDescriptions')
+
+            for tag in tag_item.get('Tags'):
+                tags.append({tag.get('Key'): tag.get('Value')})
             elb_info = {
-                'name': elb.get('Name'),
+                'name': elb.get('LoadBalancerName'),
                 'zones': elb.get('AvailabilityZones'),
                 'dns_name': elb.get('DNSName'),
                 'canonical_hosted_zone_name':
@@ -231,8 +245,10 @@ class ElbInformation(object):
                 'hosted_zone_name': elb.get('CanonicalHostedZoneName'),
                 'hosted_zone_id': elb.get('CanonicalHostedZoneNameID'),
                 'instances':
-                    [instance.get('ID') for instance in elb.get('Instances')],
-                'listeners': self._get_elb_listeners(elb.get('ListenerDescriptions')),
+                    [instance.get('InstanceId')
+                     for instance in elb.get('Instances')],
+                'listeners':
+                    self._get_elb_listeners(elb.get('ListenerDescriptions')),
                 'scheme': elb.get('Scheme'),
                 'security_groups': elb.get('SecurityGroups'),
                 'health_check': self._get_health_check(elb.get('HealthCheck')),
@@ -242,25 +258,24 @@ class ElbInformation(object):
                 'instances_outofservice': [],
                 'instances_outofservice_count': 0,
                 'instances_inservice_percent': 0.0,
-                'tags': self._get_tags(elb.get('Name'))
+                'tags': tags,
             }
         return elb_info
 
     def list_elbs(self):
         elb_array, token = [], None
         if self.module.params['use_boto3']:
-            session = boto3.session.Session(
+            self.session = boto3.session.Session(
                 profile_name=self.module.params['profile'],
                 region_name=self.module.params['region'])
-            client = session.client('elb')
-            paginator = client.get_paginator('describe_load_balancers')
+            self.client = self.session.client('elb')
+            paginator = self.client.get_paginator('describe_load_balancers')
             page_iterator = paginator.paginate()
 
             elb_array = []
             for page in page_iterator:
                 for elb in page.get('LoadBalancerDescriptions'):
                     elb_array.append(elb)
-                print(elb_array)
         else:
             get_elb_with_backoff = AWSRetry.backoff(
                 tries=5, delay=5, backoff=2.0)(
