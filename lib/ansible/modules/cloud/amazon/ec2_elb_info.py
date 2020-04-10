@@ -230,10 +230,9 @@ class ElbInformation(object):
             result = self.client.describe_tags(
                 LoadBalancerNames=[
                     elb.get('LoadBalancerName')])
-            tag_item = result.get('TagDescriptions')
-
-            for tag in tag_item:
-                tags.append({tag.get('Key'): tag.get('Value')})
+            for tag_item in result.get('TagDescriptions'):
+                for tag in tag_item.get('Tags'):
+                    tags.append({tag.get('Key'): tag.get('Value')})
             elb_info = {
                 'name': elb.get('LoadBalancerName'),
                 'zones': elb.get('AvailabilityZones'),
