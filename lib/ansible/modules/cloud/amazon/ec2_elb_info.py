@@ -129,14 +129,14 @@ class ElbInformation(object):
 
         for listener in listeners:
             listener_dict = {
-                'load_balancer_port': listener[0],
-                'instance_port': listener[1],
-                'protocol': listener[2],
-                'instance_protocol': listener[3]
+                'load_balancer_port': listener.get('LoadBalancerPort'),
+                'instance_port': listener.get('InstancePort'),
+                'protocol': listener.get('Protocol'),
+                'instance_protocol': listener.get('InstanceProtocol')
             }
 
             try:
-                ssl_certificate_id = listener[4]
+                ssl_certificate_id = listener.get('SSLCertificateId')
             except IndexError:
                 pass
             else:
@@ -171,76 +171,116 @@ class ElbInformation(object):
 
     @AWSRetry.backoff(tries=5, delay=5, backoff=2.0)
     def _get_elb_info(self, elb):
-        elb_info = {
-            'name': elb.name,
-            'zones': elb.availability_zones,
-            'dns_name': elb.dns_name,
-            'canonical_hosted_zone_name': elb.canonical_hosted_zone_name,
-            'canonical_hosted_zone_name_id': elb.canonical_hosted_zone_name_id,
-            'hosted_zone_name': elb.canonical_hosted_zone_name,
-            'hosted_zone_id': elb.canonical_hosted_zone_name_id,
-            'instances': [instance.id for instance in elb.instances],
-            'listeners': self._get_elb_listeners(elb.listeners),
-            'scheme': elb.scheme,
-            'security_groups': elb.security_groups,
-            'health_check': self._get_health_check(elb.health_check),
-            'subnets': elb.subnets,
-            'instances_inservice': [],
-            'instances_inservice_count': 0,
-            'instances_outofservice': [],
-            'instances_outofservice_count': 0,
-            'instances_inservice_percent': 0.0,
-            'tags': self._get_tags(elb.name)
-        }
+        try:
+            elb_info = {
+                'name': elb.name,
+                'zones': elb.availability_zones,
+                'dns_name': elb.dns_name,
+                'canonical_hosted_zone_name': elb.canonical_hosted_zone_name,
+                'canonical_hosted_zone_name_id': elb.canonical_hosted_zone_name_id,
+                'hosted_zone_name': elb.canonical_hosted_zone_name,
+                'hosted_zone_id': elb.canonical_hosted_zone_name_id,
+                'instances': [instance.id for instance in elb.instances],
+                'listeners': self._get_elb_listeners(elb.listeners),
+                'scheme': elb.scheme,
+                'security_groups': elb.security_groups,
+                'health_check': self._get_health_check(elb.health_check),
+                'subnets': elb.subnets,
+                'instances_inservice': [],
+                'instances_inservice_count': 0,
+                'instances_outofservice': [],
+                'instances_outofservice_count': 0,
+                'instances_inservice_percent': 0.0,
+                'tags': self._get_tags(elb.name)
+            }
 
-        if elb.vpc_id:
-            elb_info['vpc_id'] = elb.vpc_id
+            if elb.vpc_id:
+                elb_info['vpc_id'] = elb.vpc_id
 
-        if elb.instances:
-            instance_health = self.connection.describe_instance_health(
-                elb.name)
-            elb_info['instances_inservice'] = [
-                inst.instance_id for inst in instance_health
-                if inst.state == 'InService']
-            elb_info['instances_inservice_count'] = len(
-                elb_info['instances_inservice'])
-            elb_info['instances_outofservice'] = [
-                inst.instance_id for inst in instance_health
-                if inst.state == 'OutOfService']
-            elb_info['instances_outofservice_count'] = len(
-                elb_info['instances_outofservice'])
-            try:
-                elb_info['instances_inservice_percent'] = (
-                    float(elb_info['instances_inservice_count']) /
-                    float(
-                        elb_info['instances_inservice_count'] +
-                        elb_info['instances_outofservice_count'])
-                ) * 100.
-            except ZeroDivisionError:
-                elb_info['instances_inservice_percent'] = 0.
+            if elb.instances:
+                instance_health = self.connection.describe_instance_health(
+                    elb.name)
+                elb_info['instances_inservice'] = [
+                    inst.instance_id for inst in instance_health
+                    if inst.state == 'InService']
+                elb_info['instances_inservice_count'] = len(
+                    elb_info['instances_inservice'])
+                elb_info['instances_outofservice'] = [
+                    inst.instance_id for inst in instance_health
+                    if inst.state == 'OutOfService']
+                elb_info['instances_outofservice_count'] = len(
+                    elb_info['instances_outofservice'])
+                try:
+                    elb_info['instances_inservice_percent'] = (
+                        float(elb_info['instances_inservice_count']) /
+                        float(
+                            elb_info['instances_inservice_count'] +
+                            elb_info['instances_outofservice_count'])
+                    ) * 100.
+                except ZeroDivisionError:
+                    elb_info['instances_inservice_percent'] = 0.
+        except AttributeError:
+            elb_info = {
+                'name': elb.get('Name'),
+                'zones': elb.get('AvailabilityZones'),
+                'dns_name': elb.get('DNSName'),
+                'canonical_hosted_zone_name':
+                    elb.get('CanonicalHostedZoneName'),
+                'canonical_hosted_zone_name_id':
+                    elb.get('CanonicalHostedZoneNameID'),
+                'hosted_zone_name': elb.get('CanonicalHostedZoneName'),
+                'hosted_zone_id': elb.get('CanonicalHostedZoneNameID'),
+                'instances':
+                    [instance.get('ID') for instance in elb.get('Instances')],
+                'listeners': self._get_elb_listeners(elb.get('ListenerDescriptions')),
+                'scheme': elb.get('Scheme'),
+                'security_groups': elb.get('SecurityGroups'),
+                'health_check': self._get_health_check(elb.get('HealthCheck')),
+                'subnets': elb.get('Subnets'),
+                'instances_inservice': [],
+                'instances_inservice_count': 0,
+                'instances_outofservice': [],
+                'instances_outofservice_count': 0,
+                'instances_inservice_percent': 0.0,
+                'tags': self._get_tags(elb.get('Name'))
+            }
         return elb_info
 
     def list_elbs(self):
         elb_array, token = [], None
-        get_elb_with_backoff = AWSRetry.backoff(
-            tries=5, delay=5, backoff=2.0)(
-            self.connection.get_all_load_balancers)
-        while True:
-            all_elbs = get_elb_with_backoff(marker=token)
-            token = all_elbs.next_marker
+        if self.module.params['use_boto3']:
+            session = boto3.session.Session(
+                profile_name=self.module.params['profile'],
+                region_name=self.module.params['region'])
+            client = session.client('elb')
+            paginator = client.get_paginator('describe_load_balancers')
+            page_iterator = paginator.paginate()
 
-            if all_elbs:
-                if self.names:
-                    for existing_lb in all_elbs:
-                        if existing_lb.name in self.names:
-                            elb_array.append(existing_lb)
+            elb_array = []
+            for page in page_iterator:
+                for elb in page.get('LoadBalancerDescriptions'):
+                    elb_array.append(elb)
+                print(elb_array)
+        else:
+            get_elb_with_backoff = AWSRetry.backoff(
+                tries=5, delay=5, backoff=2.0)(
+                self.connection.get_all_load_balancers)
+            while True:
+                all_elbs = get_elb_with_backoff(marker=token)
+                token = all_elbs.next_marker
+
+                if all_elbs:
+                    if self.names:
+                        for existing_lb in all_elbs:
+                            if existing_lb.name in self.names:
+                                elb_array.append(existing_lb)
+                    else:
+                        elb_array.extend(all_elbs)
                 else:
-                    elb_array.extend(all_elbs)
-            else:
-                break
+                    break
 
-            if token is None:
-                break
+                if token is None:
+                    break
 
         return list(map(self._get_elb_info, elb_array))
 
@@ -262,33 +302,22 @@ def main():
     if not HAS_BOTO:
         module.fail_json(msg='boto required for this module')
 
-    if module.params['use_boto3']:
-        print('use boto3')
-        session = boto3.session.Session(
-            profile_name=module.params['profile'],
-            region_name=module.params['region'])
-        client = session.client('elb')
-        elbs = client.describe_load_balancers()
-        print(elbs)
+    try:
+        region, ec2_url, aws_connect_params = get_aws_connection_info(
+            module)
+        if not region:
+            module.fail_json(msg="region must be specified")
+
+        names = module.params['names']
+        elb_information = ElbInformation(
+            module, names, region, **aws_connect_params)
+
         ec2_info_result = dict(changed=False,
-                               elbs=elbs)
-    else:
-        try:
-            region, ec2_url, aws_connect_params = get_aws_connection_info(
-                module)
-            if not region:
-                module.fail_json(msg="region must be specified")
+                               elbs=elb_information.list_elbs())
 
-            names = module.params['names']
-            elb_information = ElbInformation(
-                module, names, region, **aws_connect_params)
-
-            ec2_info_result = dict(changed=False,
-                                   elbs=elb_information.list_elbs())
-
-        except BotoServerError as err:
-            module.fail_json(msg="{0}: {1}".format(err.error_code, err.error_message),
-                             exception=traceback.format_exc())
+    except BotoServerError as err:
+        module.fail_json(msg="{0}: {1}".format(err.error_code, err.error_message),
+                         exception=traceback.format_exc())
 
     module.exit_json(**ec2_info_result)
 
